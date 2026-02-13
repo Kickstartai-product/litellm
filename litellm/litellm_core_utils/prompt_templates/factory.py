@@ -1216,8 +1216,9 @@ def convert_to_gemini_tool_call_invoke(
                         )
                     )
                     if gemini_function_call is not None:
+                        # Gemini expects functionCall (camelCase) in request bodies.
                         _parts_list.append(
-                            VertexPartType(function_call=gemini_function_call)
+                            cast(VertexPartType, {"functionCall": gemini_function_call})
                         )
                     else:  # don't silently drop params. Make it clear to user what's happening.
                         raise Exception(
@@ -1230,7 +1231,9 @@ def convert_to_gemini_tool_call_invoke(
                 function_call_params=function_call
             )
             if gemini_function_call is not None:
-                _parts_list.append(VertexPartType(function_call=gemini_function_call))
+                _parts_list.append(
+                    cast(VertexPartType, {"functionCall": gemini_function_call})
+                )
             else:  # don't silently drop params. Make it clear to user what's happening.
                 raise Exception(
                     "function_call missing. Received tool call with 'type': 'function'. No function call in argument - {}".format(

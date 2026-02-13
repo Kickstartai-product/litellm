@@ -1,3 +1,6 @@
+from litellm.litellm_core_utils.prompt_templates.factory import (
+    convert_to_gemini_tool_call_invoke,
+)
 from litellm.llms.vertex_ai.gemini.transformation import (
     check_if_part_exists_in_parts,
     _transform_request_body,
@@ -176,3 +179,67 @@ def test_empty_content_handling():
     assert len(contents[0]["parts"]) == 1
     assert "text" in contents[0]["parts"][0]
     assert contents[0]["parts"][0]["text"] == ""
+
+
+def test_tool_call_invoke_serializes_function_call_in_camel_case():
+    assistant_message = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "get_current_temperature",
+                    "arguments": '{"location": "Paris"}',
+                },
+                "index": 0,
+            }
+        ],
+    }
+
+    gemini_parts = convert_to_gemini_tool_call_invoke(assistant_message)
+
+    assert len(gemini_parts) == 1
+    assert "functionCall" in gemini_parts[0]
+    assert "function_call" not in gemini_parts[0]
+
+
+def test_parallel_tool_calls_inherit_signature_from_thinking_blocks():
+    messages = [
+        {
+            "role": "assistant",
+            "content": None,
+            "thinking_blocks": [
+                {
+                    "type": "thinking",
+                    "thinking": '{"functionCall":{"name":"tool_a","args":{"x":1}}}',
+                    "signature": "sig-turn-abc",
+                }
+            ],
+            "tool_calls": [
+                {
+                    "id": "call_a",
+                    "type": "function",
+                    "function": {"name": "tool_a", "arguments": '{"x":1}'},
+                    "index": 0,
+                },
+                {
+                    "id": "call_b",
+                    "type": "function",
+                    "function": {"name": "tool_b", "arguments": '{"y":2}'},
+                    "index": 1,
+                },
+            ],
+        }
+    ]
+
+    contents = _gemini_convert_messages_with_history(messages=messages)
+
+    function_parts = [
+        part
+        for part in contents[0]["parts"]
+        if part.get("functionCall") is not None or part.get("function_call") is not None
+    ]
+    assert len(function_parts) == 2
+    assert all(part.get("thoughtSignature") == "sig-turn-abc" for part in function_parts)
